@@ -450,4 +450,23 @@ def _report(res: Result, idx: int, total: int) -> None:
     else:
         log.error("%s FAIL  %s  %s", tag, res.src, res.message)
  
+
+def run(tasks, opts: Options, overwrite: bool, jobs: int) -> list[Result]:
+    results: list[Result] = []
+    total = len(tasks)
+    if jobs > 1 and total > 1:
+        with ProcessPoolExecutor(max_workers=min(jobs, total)) as pool:
+            futures = [pool.submit(convert_one, s, d, opts, overwrite) for s, d in tasks]
+            for i, fut in enumerate(as_completed(futures), 1):
+                results.append(fut.result())
+                _report(results[-1], i, total)
+    else:
+        for i, (s, d) in enumerate(tasks, 1):
+            results.append(convert_one(s, d, opts, overwrite))
+            _report(results[-1], i, total)
+    return results
+ 
+
+
+
  
