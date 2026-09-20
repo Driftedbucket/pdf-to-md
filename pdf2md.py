@@ -196,3 +196,51 @@ def _extract_page(page, want_tables: bool) -> PageData:
             lines.append(Line(text, raw["top"], raw["bottom"], raw["x0"], size, bold))
     return PageData(float(page.height), lines, tables)
 
+
+
+# ********************************************Document-level analysis************************************************
+
+
+def _body_size(pages: list[PageData]) -> float:
+    counts: Counter = Counter()
+    for p in pages:
+        for ln in p.lines:
+            counts[ln.size] += len(ln.text)
+    return counts.most_common(1)[0][0] if counts else 0.0
+ 
+ 
+def _repeated_margin_text(pages: list[PageData]) -> set[str]:
+    """Text (digits normalised) that recurs in the top/bottom margin on many pages."""
+    if len(pages) < 2:
+        return set()
+    counts: Counter = Counter()
+    for p in pages:
+        counts.update({_norm(ln.text) for ln in p.lines if _in_margin(ln, p.height)})
+    threshold = max(2, len(pages) * 0.5)
+    return {t for t, n in counts.items() if t and n >= threshold}
+ 
+ 
+def _heading_level(line: Line, body: float) -> int:
+    if not body or not line.size or len(line.text) > 150:
+        return 0
+    ratio = line.size / body
+    if ratio >= 1.8:
+        return 1
+    if ratio >= 1.45:
+        return 2
+    if ratio >= 1.2:
+        return 3
+    short = len(line.text) <= 80 and not line.text.rstrip().endswith((".", ",", ";", ":"))
+    if line.bold and ratio >= 0.95 and short and not _list_item(line.text):
+        return 4
+    return 0
+ 
+ 
+def _list_item(text: str) -> str | None:
+    if m := BULLET_RE.match(text):
+        return "- " + _escape(text[m.end():].strip())
+    if m := NUMBERED_RE.match(text):
+        return f"{m.group(1)}. " + _escape(text[m.end():].strip())
+    if LETTERED_RE.match(text):
+        return "- " + _escape(text.strip())
+    return None
