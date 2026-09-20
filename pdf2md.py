@@ -376,4 +376,23 @@ class Result:
     seconds: float = 0.0
     message: str = ""
 
+    
+def convert_one(src: Path, dst: Path, opts: Options, overwrite: bool) -> Result:
+    if dst.exists() and not overwrite:
+        return Result(src, dst, "exists")
+    t0 = time.perf_counter()
+    try:
+        markdown, pages = pdf_to_markdown(src, opts)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(markdown, encoding="utf-8")
+        return Result(src, dst, "ok", pages, time.perf_counter() - t0)
+    except NoTextError as exc:
+        return Result(src, dst, "no_text", message=str(exc))
+    except Exception as exc:
+        msg = f"{type(exc).__name__}: {exc}"
+        if "password" in msg.lower():
+            msg += "  (use --password)"
+        return Result(src, dst, "error", message=msg)
+
+
 
