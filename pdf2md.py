@@ -439,5 +439,15 @@ def plan(inputs: list[str], outdir: Path | None, recursive: bool) -> list[tuple[
     return tasks
  
 
-
+def _report(res: Result, idx: int, total: int) -> None:
+    tag = f"[{idx}/{total}]"
+    if res.status == "ok":
+        log.info("%s OK    %s -> %s  (%d pages, %.1fs)", tag, res.src, res.dst, res.pages, res.seconds)
+    elif res.status == "exists":
+        log.info("%s SKIP  %s  (%s exists; use --overwrite)", tag, res.src, res.dst)
+    elif res.status == "no_text":
+        log.warning("%s WARN  %s  %s", tag, res.src, res.message)
+    else:
+        log.error("%s FAIL  %s  %s", tag, res.src, res.message)
+ 
  
