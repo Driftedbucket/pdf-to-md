@@ -376,7 +376,7 @@ class Result:
     seconds: float = 0.0
     message: str = ""
 
-    
+
 def convert_one(src: Path, dst: Path, opts: Options, overwrite: bool) -> Result:
     if dst.exists() and not overwrite:
         return Result(src, dst, "exists")
@@ -395,4 +395,31 @@ def convert_one(src: Path, dst: Path, opts: Options, overwrite: bool) -> Result:
         return Result(src, dst, "error", message=msg)
 
 
-
+def collect_inputs(inputs: list[str], recursive: bool) -> list[tuple[Path, Path]]:
+    """Expand files, directories and glob patterns into (pdf_path, relative_path) pairs."""
+    found: list[tuple[Path, Path]] = []
+    seen: set[Path] = set()
+ 
+    def add(path: Path, rel: Path) -> None:
+        key = path.resolve()
+        if key not in seen:
+            seen.add(key)
+            found.append((path, rel))
+ 
+    for raw in inputs:
+        p = Path(raw)
+        if p.is_dir():
+            for f in sorted(p.rglob("*") if recursive else p.glob("*")):
+                if f.is_file() and f.suffix.lower() == ".pdf":
+                    add(f, f.relative_to(p))
+        elif p.is_file():
+            add(p, Path(p.name))
+        else:
+            matches = [Path(m) for m in sorted(glob.glob(raw, recursive=True))]
+            files = [m for m in matches if m.is_file()]
+            if not files:
+                log.warning("WARN  nothing matches %r", raw)
+            for m in files:
+                add(m, Path(m.name))
+    return found
+ 
