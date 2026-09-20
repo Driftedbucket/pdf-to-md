@@ -23,6 +23,7 @@ log = logging.getLogger("pdf2md")
 
 # **************************************************Tunables**************************************************
 
+
 PARA_GAP = 0.6   # vertical gap (in line-heights) that starts a new paragraph
 MARGIN = 0.08    # top/bottom fraction of the page searched for headers/footers
  
@@ -34,6 +35,7 @@ BOLD_HINTS = ("bold", "black", "heavy", "demi")
 
 
 # ******************************************Data structures*************************************************
+
 
 @dataclass(frozen=True)
 class Options:
@@ -121,4 +123,76 @@ def _line_style(chars: list[dict]) -> tuple[float, bool]:
     return size, bold
 
 
+
+# ****************************************************Tables********************************************************
+
+
+def _clean_cell(cell) -> str:
+    if cell is None:
+        return ""
+    text = re.sub(r"\s*\n\s*", " ", str(cell)).strip()
+    return _escape(text).replace("|", "\\|")
+ 
+ 
+def _clean_table(raw) -> list[list[str]]:
+    rows = [[_clean_cell(c) for c in row] for row in (raw or [])]
+    rows = [r for r in rows if any(r)]
+    if not rows:
+        return []
+    width = max(len(r) for r in rows)
+    rows = [r + [""] * (width - len(r)) for r in rows]
+    keep = [i for i in range(width) if any(r[i] for r in rows)]
+    return [[r[i] for i in keep] for r in rows]
+ 
+ 
+def _table_to_md(rows: list[list[str]]) -> str:
+    if len(rows) == 1 and len(rows[0]) == 1:  # a boxed call-out, not a table
+        return "> " + rows[0][0]
+    header, *body = rows
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join("---" for _ in header) + " |",
+    ]
+    lines += ["| " + " | ".join(r) + " |" for r in body]
+    return "\n".join(lines)
+
+
+
+# ********************************************Page extraction******************************************************
+
+
+def _outside(bboxes):
+    """Predicate for page.filter(): keep objects whose centre is outside every bbox."""
+    def keep(obj) -> bool:
+        try:
+            cx = (obj["x0"] + obj["x1"]) / 2
+            cy = (obj["top"] + obj["bottom"]) / 2
+        except KeyError:
+            return True
+        return not any(b[0] <= cx <= b[2] and b[1] <= cy <= b[3] for b in bboxes)
+    return keep
+ 
+ 
+def _extract_page(page, want_tables: bool) -> PageData:
+    tables: list[Table] = []
+    bboxes: list[tuple] = []
+    if want_tables:
+        try:
+            for t in page.find_tables():
+                bboxes.append(t.bbox)
+                rows = _clean_table(t.extract())
+                if rows:
+                    tables.append(Table(top=t.bbox[1], rows=rows))
+        except Exception as exc:  # table detection is best-effort
+            log.debug("table detection failed on page %s: %s", page.page_number, exc)
+            bboxes, tables = [], []
+ 
+    body = page.filter(_outside(bboxes)) if bboxes else page
+    lines: list[Line] = []
+    for raw in body.extract_text_lines(return_chars=True):
+        text = raw["text"].strip()
+        if text:
+            size, bold = _line_style(raw["chars"])
+            lines.append(Line(text, raw["top"], raw["bottom"], raw["x0"], size, bold))
+    return PageData(float(page.height), lines, tables)
 
