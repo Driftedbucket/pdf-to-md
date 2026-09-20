@@ -364,5 +364,16 @@ def _front_matter(pdf, path: Path) -> str:
 
 
 
+# ************************************************Batch driver*****************************************************
+
+
+@dataclass
+class Result:
+    src: Path
+    dst: Path
+    status: str  # ok | exists | no_text | error
+    pages: int = 0
+    seconds: float = 0.0
+    message: str = ""
 
 
