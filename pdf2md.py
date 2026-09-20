@@ -493,6 +493,33 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("-v", "--verbose", action="store_true", help="debug output")
     return ap.parse_args(argv)
  
-
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(message)s")
+    logging.getLogger("pdfminer").setLevel(logging.ERROR)
+ 
+    tasks = plan(args.inputs, args.output_dir, args.recursive)
+    if not tasks:
+        log.error("No PDF files found.")
+        return 2
+ 
+    opts = Options(
+        page_breaks=args.page_breaks,
+        front_matter=args.front_matter,
+        keep_headers_footers=args.keep_headers_footers,
+        tables=not args.no_tables,
+        password=args.password,
+    )
+    jobs = (os.cpu_count() or 1) if args.jobs == 0 else args.jobs
+    results = run(tasks, opts, args.overwrite, jobs)
+ 
+    counts = Counter(r.status for r in results)
+    log.info("\nDone: %d converted, %d skipped, %d without text, %d failed",
+             counts["ok"], counts["exists"], counts["no_text"], counts["error"])
+    return 1 if counts["no_text"] or counts["error"] else 0
+ 
+ 
+if __name__ == "__main__":
+    sys.exit(main())
 
  
