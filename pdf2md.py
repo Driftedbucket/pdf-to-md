@@ -274,6 +274,93 @@ class _Builder:
         self.kind, self.parts = None, []
  
  
+def _page_blocks(page: PageData, body: float, skip: set[str]) -> list[Block]:
+    lines = [
+        ln for ln in page.lines
+        if not (skip and _in_margin(ln, page.height) and _norm(ln.text) in skip)
+    ]
+    table_tops = [t.top for t in page.tables]
+    b = _Builder()
+ 
+    for ln in lines:
+        gap = ln.top - b.bottom
+        height = max(ln.bottom - ln.top, 1.0)
+        split = (
+            b.kind is None
+            or gap > PARA_GAP * height
+            or any(b.bottom <= t <= ln.top for t in table_tops)
+        )
+ 
+        if level := _heading_level(ln, body):
+            kind = f"h{level}"
+            if b.kind == kind and not split:
+                b.extend(_escape(ln.text), ln)      # multi-line heading
+            else:
+                b.start(kind, _escape(ln.text), ln)
+        elif (item := _list_item(ln.text)) is not None:
+            b.start("list", item, ln)
+        elif b.kind in ("para", "list") and not split:
+            b.extend(_escape(ln.text), ln)          # wrapped line
+        else:
+            b.start("para", _escape(ln.text), ln)
+ 
+    b.flush()
+    items = b.done + [(t.top, Block("table", _table_to_md(t.rows))) for t in page.tables]
+    items.sort(key=lambda x: x[0])
+    return [blk for _, blk in items]
+ 
+ 
+def _continues(prev: str, nxt: str) -> bool:
+    """True if `nxt` looks like the continuation of an unfinished sentence in `prev`."""
+    return not prev.rstrip().endswith((".", "!", "?", ":", ";", '"', "”")) and nxt[:1].islower()
+ 
+ 
+def _assemble(pages: list[PageData], body: float, skip: set[str], opts: Options) -> list[Block]:
+    blocks: list[Block] = []
+    for i, page in enumerate(pages, 1):
+        page_blocks = _page_blocks(page, body, skip)
+        if opts.page_breaks:
+            blocks.append(Block("comment", f"<!-- page {i} -->"))
+        elif (
+            blocks and page_blocks
+            and blocks[-1].kind == "para" and page_blocks[0].kind == "para"
+            and _continues(blocks[-1].text, page_blocks[0].text)
+        ):
+            blocks[-1] = Block("para", _join([blocks[-1].text, page_blocks[0].text]))
+            page_blocks = page_blocks[1:]
+        blocks.extend(page_blocks)
+    return blocks
+ 
+ 
+def _render(blocks: list[Block]) -> str:
+    out: list[str] = []
+    prev: Block | None = None
+    for blk in blocks:
+        if prev is not None:
+            out.append("\n" if prev.kind == blk.kind == "list" else "\n\n")
+        if blk.kind.startswith("h"):
+            out.append("#" * int(blk.kind[1]) + " " + blk.text)
+        else:
+            out.append(blk.text)
+        prev = blk
+    return "".join(out).strip() + "\n"
+ 
+ 
+def _meta(meta: dict, key: str) -> str:
+    value = str(meta.get(key) or "").strip()
+    return "" if value.lower() in {"(anonymous)", "anonymous", "untitled", "unknown"} else value
+ 
+ 
+def _front_matter(pdf, path: Path) -> str:
+    meta = pdf.metadata or {}
+    title = _meta(meta, "Title") or path.stem
+    author = _meta(meta, "Author")
+    lines = ["---", f"title: {json.dumps(title, ensure_ascii=False)}"]
+    if author:
+        lines.append(f"author: {json.dumps(author, ensure_ascii=False)}")
+    lines += [f"source: {json.dumps(path.name, ensure_ascii=False)}",
+              f"pages: {len(pdf.pages)}", "---", "", ""]
+    return "\n".join(lines)
 
 
 
