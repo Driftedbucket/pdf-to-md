@@ -467,6 +467,32 @@ def run(tasks, opts: Options, overwrite: bool, jobs: int) -> list[Result]:
     return results
  
 
+def parse_args(argv=None) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(
+        prog="pdf2md",
+        description="Convert PDF files to Markdown. Accepts files, directories and glob patterns.",
+    )
+    ap.add_argument("inputs", nargs="+", help="PDF files, directories, or glob patterns")
+    ap.add_argument("-o", "--output-dir", type=Path,
+                    help="write .md files here (default: next to each PDF)")
+    ap.add_argument("-r", "--recursive", action="store_true",
+                    help="search directories recursively (mirrors sub-folders in --output-dir)")
+    ap.add_argument("-f", "--overwrite", action="store_true",
+                    help="overwrite existing .md files (default: skip them)")
+    ap.add_argument("-j", "--jobs", type=int, default=1,
+                    help="parallel workers; 0 = all CPUs (default: 1)")
+    ap.add_argument("--page-breaks", action="store_true",
+                    help="insert <!-- page N --> markers between pages")
+    ap.add_argument("--front-matter", action="store_true",
+                    help="prepend YAML front matter (title, author, source, pages)")
+    ap.add_argument("--keep-headers-footers", action="store_true",
+                    help="don't strip repeated running headers/footers/page numbers")
+    ap.add_argument("--no-tables", action="store_true",
+                    help="skip table detection (treat table text as plain lines)")
+    ap.add_argument("--password", help="password for encrypted PDFs")
+    ap.add_argument("-v", "--verbose", action="store_true", help="debug output")
+    return ap.parse_args(argv)
+ 
 
 
  
