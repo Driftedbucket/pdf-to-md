@@ -422,4 +422,22 @@ def collect_inputs(inputs: list[str], recursive: bool) -> list[tuple[Path, Path]
             for m in files:
                 add(m, Path(m.name))
     return found
+
+
+def plan(inputs: list[str], outdir: Path | None, recursive: bool) -> list[tuple[Path, Path]]:
+    """Pair each source PDF with a unique destination .md path."""
+    tasks: list[tuple[Path, Path]] = []
+    used: set[Path] = set()
+    for src, rel in collect_inputs(inputs, recursive):
+        base = (outdir / rel if outdir else src).with_suffix(".md")
+        dst, n = base, 1
+        while dst in used:
+            dst = base.with_name(f"{base.stem}_{n}{base.suffix}")
+            n += 1
+        used.add(dst)
+        tasks.append((src, dst))
+    return tasks
+ 
+
+
  
