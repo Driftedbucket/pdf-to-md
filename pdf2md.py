@@ -244,3 +244,38 @@ def _list_item(text: str) -> str | None:
     if LETTERED_RE.match(text):
         return "- " + _escape(text.strip())
     return None
+
+
+
+# *********************************************Block building******************************************************
+
+
+class _Builder:
+    """Accumulates consecutive lines into a single heading / paragraph / list item."""
+ 
+    def __init__(self) -> None:
+        self.done: list[tuple[float, Block]] = []
+        self.kind: str | None = None
+        self.parts: list[str] = []
+        self.top = 0.0
+        self.bottom = 0.0
+ 
+    def start(self, kind: str, text: str, ln: Line) -> None:
+        self.flush()
+        self.kind, self.parts, self.top, self.bottom = kind, [text], ln.top, ln.bottom
+ 
+    def extend(self, text: str, ln: Line) -> None:
+        self.parts.append(text)
+        self.bottom = ln.bottom
+ 
+    def flush(self) -> None:
+        if self.kind:
+            self.done.append((self.top, Block(self.kind, _join(self.parts))))
+        self.kind, self.parts = None, []
+ 
+ 
+
+
+
+
+
