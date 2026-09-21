@@ -362,6 +362,20 @@ def _front_matter(pdf, path: Path) -> str:
               f"pages: {len(pdf.pages)}", "---", "", ""]
     return "\n".join(lines)
 
+# ************************************************Conversion******************************************************
+
+def pdf_to_markdown(path: Path, opts: Options = Options()) -> tuple[str, int]:
+    """Convert one PDF to Markdown. Returns (markdown, page_count)."""
+    with pdfplumber.open(path, password=opts.password) as pdf:
+        pages = [_extract_page(p, opts.tables) for p in pdf.pages]
+        if not any(p.lines or p.tables for p in pages):
+            raise NoTextError("no extractable text (scanned PDF? run OCR first)")
+        body = _body_size(pages)
+        skip = set() if opts.keep_headers_footers else _repeated_margin_text(pages)
+        markdown = _render(_assemble(pages, body, skip, opts))
+        if opts.front_matter:
+            markdown = _front_matter(pdf, path) + markdown
+        return markdown, len(pages)
 
 
 # ************************************************Batch driver*****************************************************
